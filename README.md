@@ -273,6 +273,11 @@ Končna produkcijska politika
 
 ### Testiranje sprejema DMARC
 
+Repozitorij vključuje testne podatke v mapi `test-fixtures/`:
+- **sample-dmarc-email.eml** - Vzorčna DMARC e-poštna sporočila za testiranje sprejema
+- **sample-dmarc-report.xml** - Vzorčno DMARC XML poročilo
+- **sample-dmarc-report.pdf** - Vzorčno generirano PDF poročilo (predogled izhodne datoteke)
+
 ```bash
 # Posodobite testno datoteko z resničnim žetonom
 nano test-fixtures/sample-dmarc-email.eml

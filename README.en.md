@@ -273,6 +273,11 @@ Final production policy
 
 ### Testing DMARC Ingest
 
+The repository includes test fixtures in the `test-fixtures/` directory:
+- **sample-dmarc-email.eml** - Sample DMARC email message for testing ingestion
+- **sample-dmarc-report.xml** - Sample DMARC XML report
+- **sample-dmarc-report.pdf** - Sample generated PDF report (preview of output)
+
 ```bash
 # Update test fixture with real token
 nano test-fixtures/sample-dmarc-email.eml
