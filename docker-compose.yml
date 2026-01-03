@@ -1,24 +1,83 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dmarc
+      POSTGRES_USER: dmarc
+      POSTGRES_PASSWORD: dmarc_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dmarc"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - dmarc-network
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - NEXT_PUBLIC_APP_URL=http://localhost:3000
-      - NEXT_PUBLIC_PRIMARY_DOMAIN=m-host.si
-      - NEXT_PUBLIC_DMARC_DOMAIN=dmarc.m-host.si
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://dmarc:dmarc_password@db:5432/dmarc
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      - NEXT_PUBLIC_PRIMARY_DOMAIN=${NEXT_PUBLIC_PRIMARY_DOMAIN}
+      - NEXT_PUBLIC_DMARC_DOMAIN=${NEXT_PUBLIC_DMARC_DOMAIN}
       - INGEST_SECRET=${INGEST_SECRET}
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/.next
-    command: npm run dev
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
+    networks:
+      - dmarc-network
+
+  postfix:
+    build:
+      context: ./docker/postfix
+      dockerfile: Dockerfile
+    environment:
+      - SMTP_DOMAIN=${SMTP_DOMAIN}
+      - INGEST_SECRET=${INGEST_SECRET}
+      - APP_URL=http://app:3000
+    ports:
+      - "25:25"
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - dmarc-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - dmarc-network
+
+volumes:
+  postgres_data:
+
+networks:
+  dmarc-network:
+    driver: bridge

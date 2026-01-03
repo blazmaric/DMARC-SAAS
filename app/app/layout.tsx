@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { useSession, signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -18,39 +17,15 @@ import { Shield, Globe, User, LogOut, Settings } from 'lucide-react';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      const supabase = createClient();
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (authUser) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*, customer:customers(*)')
-          .eq('id', authUser.id)
-          .maybeSingle();
-
-        setUser(userData);
-      }
-
-      setLoading(false);
-    };
-
-    loadUser();
-  }, []);
+  const { data: session, status } = useSession();
+  const user = session?.user;
 
   const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await signOut({ redirect: false });
     router.push('/login');
   };
 
-  if (loading) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
@@ -112,7 +87,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <div className="flex flex-col">
                       <span className="font-medium">{user?.email}</span>
                       <span className="text-xs text-slate-500">
-                        {user?.role === 'admin' ? 'Administrator' : user?.customer?.name}
+                        {user?.role === 'admin' ? 'Administrator' : user?.customerName}
                       </span>
                     </div>
                   </DropdownMenuLabel>

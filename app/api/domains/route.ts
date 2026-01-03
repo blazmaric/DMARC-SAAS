@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { generateSecureToken } from '@/lib/tokens';
 import { z } from 'zod';
@@ -17,25 +17,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = await createClient();
-
-    let query = supabase
-      .from('domains')
-      .select('*, customer:customers(*)');
-
-    if (user.role === 'customer' && user.customer_id) {
-      query = query.eq('customer_id', user.customer_id);
-    }
-
-    const { data: domains, error } = await query.order('created_at', {
-      ascending: false,
-    });
-
-    if (error) {
-      return NextResponse.json(
-        { error: 'Failed to fetch domains' },
-        { status: 500 }
-      );
+    let domains;
+    if (user.role === 'customer' && user.customerId) {
+      domains = await prisma.domain.findMany({
+        where: { customerId: user.customerId },
+        include: { customer: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      domains = await prisma.domain.findMany({
+        include: { customer: true },
+        orderBy: { createdAt: 'desc' },
+      });
     }
 
     return NextResponse.json({ domains });
@@ -62,7 +55,7 @@ export async function POST(request: NextRequest) {
     let targetCustomerId = customerId;
 
     if (user.role === 'customer') {
-      targetCustomerId = user.customer_id;
+      targetCustomerId = user.customerId || undefined;
     }
 
     if (!targetCustomerId) {
@@ -72,26 +65,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-
     const ruaToken = generateSecureToken(24);
 
-    const { data: domain, error } = await supabase
-      .from('domains')
-      .insert({
-        domain_name: domainName,
-        customer_id: targetCustomerId,
-        rua_token: ruaToken,
-      })
-      .select('*, customer:customers(*)')
-      .single();
-
-    if (error) {
-      return NextResponse.json(
-        { error: 'Failed to create domain' },
-        { status: 500 }
-      );
-    }
+    const domain = await prisma.domain.create({
+      data: {
+        domainName,
+        customerId: targetCustomerId,
+        ruaToken,
+      },
+      include: { customer: true },
+    });
 
     return NextResponse.json({ domain });
   } catch (error) {

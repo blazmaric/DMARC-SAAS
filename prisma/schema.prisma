@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users   User[]
+  domains Domain[]
+
+  @@map("customers")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String   @default("customer")
+  customerId   String?  @map("customer_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@map("users")
+}
+
+model Domain {
+  id         String   @id @default(uuid())
+  customerId String   @map("customer_id")
+  domainName String   @map("domain_name")
+  ruaToken   String   @unique @map("rua_token")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  dmarcReports    DmarcReport[]
+  dailyAggregates DailyAggregate[]
+
+  @@index([customerId])
+  @@index([ruaToken])
+  @@map("domains")
+}
+
+model DmarcReport {
+  id        String   @id @default(uuid())
+  domainId  String   @map("domain_id")
+  orgName   String   @map("org_name")
+  reportId  String   @map("report_id")
+  beginDate DateTime @map("begin_date")
+  endDate   DateTime @map("end_date")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  domain  Domain        @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  records DmarcRecord[]
+
+  @@unique([domainId, orgName, reportId, beginDate, endDate], name: "unique_report")
+  @@index([domainId])
+  @@index([beginDate, endDate])
+  @@map("dmarc_reports")
+}
+
+model DmarcRecord {
+  id           String  @id @default(uuid())
+  reportId     String  @map("report_id")
+  sourceIp     String  @map("source_ip")
+  count        Int     @default(0)
+  disposition  String
+  dkimResult   String  @map("dkim_result")
+  spfResult    String  @map("spf_result")
+  dkimAligned  Boolean @map("dkim_aligned") @default(false)
+  spfAligned   Boolean @map("spf_aligned") @default(false)
+  headerFrom   String  @map("header_from")
+  envelopeFrom String? @map("envelope_from")
+
+  report DmarcReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([sourceIp])
+  @@map("dmarc_records")
+}
+
+model DailyAggregate {
+  id          String   @id @default(uuid())
+  domainId    String   @map("domain_id")
+  date        DateTime @db.Date
+  total       Int      @default(0)
+  passAligned Int      @map("pass_aligned") @default(0)
+  failAligned Int      @map("fail_aligned") @default(0)
+
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, date], name: "unique_daily_aggregate")
+  @@index([domainId, date(sort: Desc)])
+  @@map("daily_aggregates")
+}

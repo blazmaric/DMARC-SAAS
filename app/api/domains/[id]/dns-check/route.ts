@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import dns from 'dns/promises';
 
@@ -15,24 +15,21 @@ export async function GET(
     }
 
     const { id } = await params;
-    const supabase = await createClient();
 
-    const { data: domain } = await supabase
-      .from('domains')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const domain = await prisma.domain.findUnique({
+      where: { id },
+    });
 
     if (!domain) {
       return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
     }
 
-    if (user.role === 'customer' && user.customer_id !== domain.customer_id) {
+    if (user.role === 'customer' && user.customerId !== domain.customerId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     try {
-      const records = await dns.resolveTxt(`_dmarc.${domain.domain_name}`);
+      const records = await dns.resolveTxt(`_dmarc.${domain.domainName}`);
 
       const dmarcRecord = records
         .flat()
@@ -45,7 +42,7 @@ export async function GET(
         });
       }
 
-      const expectedRuaEmail = `${domain.rua_token}@${process.env.NEXT_PUBLIC_DMARC_DOMAIN}`;
+      const expectedRuaEmail = `${domain.ruaToken}@${process.env.NEXT_PUBLIC_DMARC_DOMAIN}`;
       const containsRua = dmarcRecord.includes(expectedRuaEmail);
 
       return NextResponse.json({

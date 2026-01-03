@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
+import { hashPassword } from '@/lib/auth';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -13,57 +14,35 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, name } = registerSchema.parse(body);
 
-    const supabase = await createServiceClient();
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
 
-    const { data: authData, error: authError } =
-      await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-      });
-
-    if (authError || !authData.user) {
+    if (existingUser) {
       return NextResponse.json(
-        { error: authError?.message || 'Failed to create user' },
+        { error: 'User with this email already exists' },
         { status: 400 }
       );
     }
 
-    const { data: customer, error: customerError } = await supabase
-      .from('customers')
-      .insert({
-        name,
-      })
-      .select('id')
-      .single();
+    const passwordHash = await hashPassword(password);
 
-    if (customerError || !customer) {
-      await supabase.auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json(
-        { error: 'Failed to create customer' },
-        { status: 500 }
-      );
-    }
-
-    const { error: userError } = await supabase.from('users').insert({
-      id: authData.user.id,
-      email,
-      role: 'customer',
-      customer_id: customer.id,
+    const customer = await prisma.customer.create({
+      data: { name },
     });
 
-    if (userError) {
-      await supabase.auth.admin.deleteUser(authData.user.id);
-      await supabase.from('customers').delete().eq('id', customer.id);
-      return NextResponse.json(
-        { error: 'Failed to create user profile' },
-        { status: 500 }
-      );
-    }
+    const user = await prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        role: 'customer',
+        customerId: customer.id,
+      },
+    });
 
     return NextResponse.json({
       message: 'User created successfully',
-      userId: authData.user.id,
+      userId: user.id,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

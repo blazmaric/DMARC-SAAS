@@ -1,22 +1,21 @@
-import { createClient } from '@/lib/supabase/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from './next-auth';
 import bcrypt from 'bcryptjs';
+import { prisma } from './prisma';
 
 export async function getCurrentUser() {
-  const supabase = await createClient();
+  const session = await getServerSession(authOptions);
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
+  if (!session?.user) {
     return null;
   }
 
-  const { data: user } = await supabase
-    .from('users')
-    .select('*, customer:customers(*)')
-    .eq('id', authUser.id)
-    .maybeSingle();
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      customer: true,
+    },
+  });
 
   return user;
 }

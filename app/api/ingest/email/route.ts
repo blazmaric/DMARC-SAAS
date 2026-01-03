@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { parseEmailForDmarc } from '@/lib/dmarc-parser';
 import { extractTokenFromEmail } from '@/lib/tokens';
 
@@ -51,13 +51,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createServiceClient();
-
-    const { data: domain } = await supabase
-      .from('domains')
-      .select('id, customer_id')
-      .eq('rua_token', token)
-      .maybeSingle();
+    const domain = await prisma.domain.findUnique({
+      where: { ruaToken: token },
+      select: { id: true, customerId: true },
+    });
 
     if (!domain) {
       return NextResponse.json(
@@ -66,15 +63,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: existingReport } = await supabase
-      .from('dmarc_reports')
-      .select('id')
-      .eq('domain_id', domain.id)
-      .eq('org_name', dmarcReport.orgName)
-      .eq('report_id', dmarcReport.reportId)
-      .eq('begin_date', dmarcReport.beginDate.toISOString())
-      .eq('end_date', dmarcReport.endDate.toISOString())
-      .maybeSingle();
+    const existingReport = await prisma.dmarcReport.findFirst({
+      where: {
+        domainId: domain.id,
+        orgName: dmarcReport.orgName,
+        reportId: dmarcReport.reportId,
+        beginDate: dmarcReport.beginDate,
+        endDate: dmarcReport.endDate,
+      },
+    });
 
     if (existingReport) {
       return NextResponse.json({
@@ -83,58 +80,46 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { data: newReport, error: reportError } = await supabase
-      .from('dmarc_reports')
-      .insert({
-        domain_id: domain.id,
-        org_name: dmarcReport.orgName,
-        report_id: dmarcReport.reportId,
-        begin_date: dmarcReport.beginDate.toISOString(),
-        end_date: dmarcReport.endDate.toISOString(),
-      })
-      .select('id')
-      .single();
+    const result = await prisma.$transaction(async (tx) => {
+      const newReport = await tx.dmarcReport.create({
+        data: {
+          domainId: domain.id,
+          orgName: dmarcReport.orgName,
+          reportId: dmarcReport.reportId,
+          beginDate: dmarcReport.beginDate,
+          endDate: dmarcReport.endDate,
+        },
+      });
 
-    if (reportError || !newReport) {
-      return NextResponse.json(
-        { error: 'Failed to create report' },
-        { status: 500 }
-      );
-    }
-
-    const recordsToInsert = dmarcReport.records.map((record) => ({
-      report_id: newReport.id,
-      source_ip: record.sourceIp,
-      count: record.count,
-      disposition: record.disposition,
-      dkim_result: record.dkimResult,
-      spf_result: record.spfResult,
-      dkim_aligned: record.dkimAligned,
-      spf_aligned: record.spfAligned,
-      header_from: record.headerFrom,
-      envelope_from: record.envelopeFrom || null,
-    }));
-
-    if (recordsToInsert.length > 0) {
-      const { error: recordsError } = await supabase
-        .from('dmarc_records')
-        .insert(recordsToInsert);
-
-      if (recordsError) {
-        console.error('Failed to insert records:', recordsError);
+      if (dmarcReport.records.length > 0) {
+        await tx.dmarcRecord.createMany({
+          data: dmarcReport.records.map((record) => ({
+            reportId: newReport.id,
+            sourceIp: record.sourceIp,
+            count: record.count,
+            disposition: record.disposition,
+            dkimResult: record.dkimResult,
+            spfResult: record.spfResult,
+            dkimAligned: record.dkimAligned,
+            spfAligned: record.spfAligned,
+            headerFrom: record.headerFrom,
+            envelopeFrom: record.envelopeFrom || null,
+          })),
+        });
       }
-    }
+
+      return newReport;
+    });
 
     await updateDailyAggregates(
       domain.id,
       dmarcReport.beginDate,
-      dmarcReport.endDate,
       dmarcReport.records
     );
 
     return NextResponse.json({
       message: 'Report processed successfully',
-      reportId: newReport.id,
+      reportId: result.id,
       recordCount: dmarcReport.records.length,
     });
   } catch (error) {
@@ -148,16 +133,11 @@ export async function POST(request: NextRequest) {
 
 async function updateDailyAggregates(
   domainId: string,
-  beginDate: Date,
-  endDate: Date,
+  date: Date,
   records: any[]
 ) {
-  const supabase = await createServiceClient();
-
-  const dateToProcess = new Date(beginDate);
-  dateToProcess.setUTCHours(0, 0, 0, 0);
-
-  const dateStr = dateToProcess.toISOString().split('T')[0];
+  const dateOnly = new Date(date);
+  dateOnly.setUTCHours(0, 0, 0, 0);
 
   const total = records.reduce((sum, r) => sum + r.count, 0);
   const passAligned = records
@@ -165,29 +145,24 @@ async function updateDailyAggregates(
     .reduce((sum, r) => sum + r.count, 0);
   const failAligned = total - passAligned;
 
-  const { data: existing } = await supabase
-    .from('daily_aggregates')
-    .select('id, total, pass_aligned, fail_aligned')
-    .eq('domain_id', domainId)
-    .eq('date', dateStr)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from('daily_aggregates')
-      .update({
-        total: existing.total + total,
-        pass_aligned: existing.pass_aligned + passAligned,
-        fail_aligned: existing.fail_aligned + failAligned,
-      })
-      .eq('id', existing.id);
-  } else {
-    await supabase.from('daily_aggregates').insert({
-      domain_id: domainId,
-      date: dateStr,
+  await prisma.dailyAggregate.upsert({
+    where: {
+      unique_daily_aggregate: {
+        domainId,
+        date: dateOnly,
+      },
+    },
+    update: {
+      total: { increment: total },
+      passAligned: { increment: passAligned },
+      failAligned: { increment: failAligned },
+    },
+    create: {
+      domainId,
+      date: dateOnly,
       total,
-      pass_aligned: passAligned,
-      fail_aligned: failAligned,
-    });
-  }
+      passAligned,
+      failAligned,
+    },
+  });
 }

@@ -1,54 +1,34 @@
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
   });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
-          response = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const publicPaths = ['/login', '/register'];
   const isPublicPath = publicPaths.some((path) =>
     request.nextUrl.pathname.startsWith(path)
   );
 
-  if (!user && !isPublicPath && request.nextUrl.pathname.startsWith('/app')) {
+  if (!token && !isPublicPath && request.nextUrl.pathname.startsWith('/app')) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (user && isPublicPath) {
+  if (!token && !isPublicPath && request.nextUrl.pathname.startsWith('/admin')) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  if (token && isPublicPath) {
     return NextResponse.redirect(new URL('/app/domains', request.url));
   }
 
-  return response;
+  if (token && request.nextUrl.pathname.startsWith('/admin') && token.role !== 'admin') {
+    return NextResponse.redirect(new URL('/app/domains', request.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

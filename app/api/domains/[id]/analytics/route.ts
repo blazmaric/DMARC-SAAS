@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 
 export async function GET(
@@ -13,56 +13,54 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = await params;
+    const { id: domainId } = await params;
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '30', 10);
 
-    const supabase = await createClient();
-
-    const { data: domain } = await supabase
-      .from('domains')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const domain = await prisma.domain.findUnique({
+      where: { id: domainId },
+    });
 
     if (!domain) {
       return NextResponse.json({ error: 'Domain not found' }, { status: 404 });
     }
 
-    if (user.role === 'customer' && user.customer_id !== domain.customer_id) {
+    if (user.role === 'customer' && user.customerId !== domain.customerId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
-    const startDateStr = startDate.toISOString().split('T')[0];
 
-    const { data: dailyStats } = await supabase
-      .from('daily_aggregates')
-      .select('*')
-      .eq('domain_id', id)
-      .gte('date', startDateStr)
-      .order('date', { ascending: true });
+    const dailyStats = await prisma.dailyAggregate.findMany({
+      where: {
+        domainId,
+        date: { gte: startDate },
+      },
+      orderBy: { date: 'asc' },
+    });
 
-    const { data: reports } = await supabase
-      .from('dmarc_reports')
-      .select('*, records:dmarc_records(*)')
-      .eq('domain_id', id)
-      .gte('begin_date', startDate.toISOString())
-      .order('begin_date', { ascending: false });
+    const reports = await prisma.dmarcReport.findMany({
+      where: {
+        domainId,
+        beginDate: { gte: startDate },
+      },
+      include: { records: true },
+      orderBy: { beginDate: 'desc' },
+    });
 
     const topSources = new Map<string, { count: number; aligned: boolean }>();
 
     reports?.forEach((report: any) => {
       report.records?.forEach((record: any) => {
-        const existing = topSources.get(record.source_ip) || {
+        const existing = topSources.get(record.sourceIp) || {
           count: 0,
           aligned: false,
         };
         existing.count += record.count;
         existing.aligned =
-          existing.aligned || (record.dkim_aligned && record.spf_aligned);
-        topSources.set(record.source_ip, existing);
+          existing.aligned || (record.dkimAligned && record.spfAligned);
+        topSources.set(record.sourceIp, existing);
       });
     });
 
@@ -77,7 +75,7 @@ export async function GET(
 
     const totalVolume = dailyStats?.reduce((sum, day) => sum + day.total, 0) || 0;
     const totalAligned =
-      dailyStats?.reduce((sum, day) => sum + day.pass_aligned, 0) || 0;
+      dailyStats?.reduce((sum, day) => sum + day.passAligned, 0) || 0;
     const alignmentRate =
       totalVolume > 0 ? Math.round((totalAligned / totalVolume) * 100) : 0;
 
