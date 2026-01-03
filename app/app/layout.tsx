@@ -12,7 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Shield, Globe, User, LogOut, Settings } from 'lucide-react';
+import { Shield, Globe, User, LogOut, Settings, Info } from 'lucide-react';
+import { APP_VERSION, COPYRIGHT, MADE_IN_SLOVENIA } from '@/lib/version';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -71,6 +72,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     Admin
                   </Link>
                 )}
+                <Link
+                  href="/app/system"
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    pathname === '/app/system'
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <Info className="inline h-4 w-4 mr-1" />
+                  System
+                </Link>
               </nav>
             </div>
 
@@ -106,6 +118,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
+
+      <footer className="bg-white border-t border-slate-200 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="text-center md:text-left">
+              <p className="text-sm text-slate-600">{COPYRIGHT}</p>
+              <p className="text-xs text-slate-500 mt-1">{MADE_IN_SLOVENIA}</p>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <Link
+                href="/app/system"
+                className="hover:text-slate-900 transition-colors"
+              >
+                Verzija {APP_VERSION}
+              </Link>
+              <span>•</span>
+              <a
+                href="https://m-host.si"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-slate-900 transition-colors"
+              >
+                M-Host d.o.o.
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

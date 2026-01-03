@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/card';
 import { AlertCircle, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { APP_VERSION, COPYRIGHT, MADE_IN_SLOVENIA } from '@/lib/version';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -120,8 +121,10 @@ export default function LoginPage() {
           </CardFooter>
         </Card>
 
-        <div className="mt-6 text-center text-sm text-slate-500">
-          <p>© 2026 M-Host. All rights reserved.</p>
+        <div className="mt-6 text-center">
+          <p className="text-sm text-slate-600">{COPYRIGHT}</p>
+          <p className="text-xs text-slate-500 mt-1">{MADE_IN_SLOVENIA}</p>
+          <p className="text-xs text-slate-400 mt-2">Verzija {APP_VERSION}</p>
         </div>
       </div>
     </div>
