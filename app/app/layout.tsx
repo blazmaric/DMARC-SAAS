@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
@@ -18,11 +20,16 @@ import { APP_VERSION, COPYRIGHT, MADE_IN_SLOVENIA } from '@/lib/version';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-
-  // Safely call useSession with fallback
   const sessionData = useSession();
-  const session = sessionData?.data ?? null;
-  const status = sessionData?.status ?? 'loading';
+
+  // Safety check for SSR
+  if (!sessionData) {
+    return <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
+    </div>;
+  }
+
+  const { data: session, status } = sessionData;
   const user = session?.user ?? null;
 
   const handleLogout = async () => {
