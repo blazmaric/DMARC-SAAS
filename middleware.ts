@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
 export async function middleware(request: NextRequest) {
+  // Redirect root to login
+  if (request.nextUrl.pathname === '/') {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   const token = await getToken({
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
@@ -32,5 +37,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/app/:path*', '/admin/:path*', '/login', '/register'],
+  matcher: ['/', '/app/:path*', '/admin/:path*', '/login', '/register'],
 };
