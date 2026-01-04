@@ -16,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { AlertCircle, Shield } from 'lucide-react';
+import { CircleAlert as AlertCircle, Shield } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { APP_VERSION, COPYRIGHT, MADE_IN_SLOVENIA } from '@/lib/version';
 
