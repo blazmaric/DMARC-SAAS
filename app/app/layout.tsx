@@ -20,8 +20,12 @@ import { APP_VERSION, COPYRIGHT, MADE_IN_SLOVENIA } from '@/lib/version';
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: session, status } = useSession();
-  const user = session?.user;
+
+  // Safely call useSession with fallback
+  const sessionData = useSession();
+  const session = sessionData?.data ?? null;
+  const status = sessionData?.status ?? 'loading';
+  const user = session?.user ?? null;
 
   const handleLogout = async () => {
     await signOut({ redirect: false });
