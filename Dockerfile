@@ -30,6 +30,9 @@ RUN npx prisma generate
 # Build Next.js
 RUN npm run build
 
+# Ensure public directory exists
+RUN mkdir -p /app/public
+
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
