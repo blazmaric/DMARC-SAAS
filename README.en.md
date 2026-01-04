@@ -208,6 +208,11 @@ docker compose up -d
 docker compose logs -f
 ```
 
+**Note**: The Dockerfile has been updated to properly handle the Prisma schema during build:
+- Prisma schema is now copied before `npm ci`, allowing the `postinstall` script to run successfully
+- OpenSSL and libc6-compat libraries have been added to all stages (deps, builder, runner) for Prisma support on Alpine Linux
+- Docker Compose v2 no longer requires the `version:` line in `docker-compose.yml`
+
 ### Step 5: Verify Deployment
 
 ```bash

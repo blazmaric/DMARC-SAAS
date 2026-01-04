@@ -4,12 +4,23 @@ FROM node:18-alpine AS base
 FROM base AS deps
 WORKDIR /app
 
+# Install required libraries for Prisma on Alpine
+RUN apk add --no-cache openssl libc6-compat
+
+# Copy package files and Prisma schema
 COPY package*.json ./
+COPY prisma ./prisma
+
+# Install dependencies (postinstall will run prisma generate)
 RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
+
+# Install required libraries for Prisma on Alpine
+RUN apk add --no-cache openssl libc6-compat
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -24,6 +35,9 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
+
+# Install required libraries for Prisma on Alpine
+RUN apk add --no-cache openssl libc6-compat
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

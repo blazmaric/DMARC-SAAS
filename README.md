@@ -208,6 +208,11 @@ docker compose up -d
 docker compose logs -f
 ```
 
+**Opomba**: Dockerfile je bil posodobljen za pravilno obravnavo Prisma sheme med gradnjo:
+- Prisma shema se sedaj kopira pred `npm ci`, kar omogoča uspešno izvajanje `postinstall` skripta
+- V vse faze (deps, builder, runner) so dodane knjižnice OpenSSL in libc6-compat za podporo Prisma na Alpine Linux
+- Docker Compose v2 ne potrebuje več vrstice `version:` v `docker-compose.yml`
+
 ### Korak 5: Preverjanje uvedbe
 
 ```bash
