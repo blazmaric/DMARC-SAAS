@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
